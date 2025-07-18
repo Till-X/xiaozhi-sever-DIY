@@ -14,7 +14,7 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from core.providers.tts.dashscope_simple import TTSProvider
+from core.providers.tts.dashscope import TTSProvider
 from config.logger import setup_logging
 
 logger = setup_logging()
@@ -70,7 +70,7 @@ async def test_dashscope_simple_tts():
         tts_provider = TTSProvider(test_config, delete_audio_file=False)
         
         # 测试文本
-        test_text = "你好，这是阿里云百炼非流式TTS的测试。今天天气怎么样？"
+        test_text = "你好，这是阿里云百炼TTS的测试。今天天气怎么样？"
         print(f"\n📝 测试文本: {test_text}")
         
         # 生成音频文件名
