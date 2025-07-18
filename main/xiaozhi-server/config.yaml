@@ -771,12 +771,12 @@ TTS:
     access_token: "U4YdYXVfpwWnk2t5Gp822zWPCuORyeJL"
     voice: "OUeAo1mhq6IBExi"
     output_dir: tmp/
-  DashScopeTTS:
+  DashScopeDoubleStreamTTS:
     # 阿里云DashScope双流式TTS服务
     # 申请地址：https://dashscope.console.aliyun.com/
     # API密钥获取：https://dashscope.console.aliyun.com/apiKey
     # 支持双流式实时语音合成，低延迟高质量
-    type: dashscope
+    type: dashscope_double_stream
     # 你的DashScope API密钥
     api_key: "sk-327b13b790cb469291bd6c1608ce43f0"
     # 模型名称，支持cosyvoice-v2等
@@ -785,4 +785,21 @@ TTS:
     voice: "cosyvoice-v2-prefix-113881176adb43aba3acde2406ebfe0e"
     # 音频格式，支持PCM_22050HZ_MONO_16BIT、PCM_16000HZ_MONO_16BIT等
     audio_format: "PCM_16000HZ_MONO_16BIT"
+    output_dir: tmp/
+  DashScopeTTS:
+    # 阿里云DashScope非流式TTS服务
+    # 申请地址：https://dashscope.console.aliyun.com/
+    # API密钥获取：https://dashscope.console.aliyun.com/apiKey
+    # 非流式语音合成，一次性返回完整音频，适合短文本
+    type: dashscope
+    # 你的DashScope API密钥
+    api_key: "你的DashScope API密钥"
+    # 模型名称，支持cosyvoice-v2等
+    model: "cosyvoice-v2"
+    # 音色ID，可选longxiaochun_v2、longwan_v2等
+    voice: "longxiaochun_v2"
+    # 音频格式，支持mp3、wav等
+    format: "mp3"
+    # 语速：0.5-2.0，默认1.0
+    speech_rate: 1.0
     output_dir: tmp/
