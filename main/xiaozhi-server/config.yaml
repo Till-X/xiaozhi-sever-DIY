@@ -381,7 +381,7 @@ LLM:
     # 可在这里找到你的api key https://bigmodel.cn/usercenter/proj-mgmt/apikeys
     model_name: glm-4-flash
     url: https://open.bigmodel.cn/api/paas/v4/
-    api_key: 你的chat-glm web key
+    api_key: 02796e64db724ed1955f3d1cc81c27a6.QuiPGczJ9MCCDhQA
   OllamaLLM:
     # 定义LLM API类型
     type: ollama
@@ -770,4 +770,19 @@ TTS:
     # 支持声音克隆，可自行上传音频，填入voice参数，voice参数为空时，使用默认声音
     access_token: "U4YdYXVfpwWnk2t5Gp822zWPCuORyeJL"
     voice: "OUeAo1mhq6IBExi"
+    output_dir: tmp/
+  DashScopeTTS:
+    # 阿里云DashScope双流式TTS服务
+    # 申请地址：https://dashscope.console.aliyun.com/
+    # API密钥获取：https://dashscope.console.aliyun.com/apiKey
+    # 支持双流式实时语音合成，低延迟高质量
+    type: dashscope
+    # 你的DashScope API密钥
+    api_key: "sk-327b13b790cb469291bd6c1608ce43f0"
+    # 模型名称，支持cosyvoice-v2等
+    model: "cosyvoice-v2"
+    # 音色ID，可在控制台查看可用音色
+    voice: "cosyvoice-v2-prefix-113881176adb43aba3acde2406ebfe0e"
+    # 音频格式，支持PCM_22050HZ_MONO_16BIT、PCM_16000HZ_MONO_16BIT等
+    audio_format: "PCM_16000HZ_MONO_16BIT"
     output_dir: tmp/
