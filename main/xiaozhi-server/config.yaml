@@ -175,7 +175,7 @@ selected_module:
   # 视觉语言大模型
   VLLM: ChatGLMVLLM
   # TTS将根据配置名称对应的type调用实际的TTS适配器
-  TTS: DashScopeSimpleTTS
+  TTS: EdgeTTS
   # 记忆模块，默认不开启记忆；如果想使用超长记忆，推荐使用mem0ai；如果注重隐私，请使用本地的mem_local_short
   Memory: nomem
   # 意图识别模块开启后，可以播放音乐、控制音量、识别退出指令。
@@ -793,11 +793,11 @@ TTS:
     # 非流式语音合成，一次性返回完整音频，适合短文本
     type: dashscope
     # 你的DashScope API密钥
-    api_key: "sk-327b13b790cb469291bd6c1608ce43f0"
+    api_key: "你的DashScope API密钥"
     # 模型名称，支持cosyvoice-v2等
     model: "cosyvoice-v2"
     # 音色ID，可选longxiaochun_v2、longwan_v2等
-    voice: "cosyvoice-v2-prefix-113881176adb43aba3acde2406ebfe0e"
+    voice: "longxiaochun_v2"
     # 音频格式，支持mp3、wav等
     format: "mp3"
     # 语速：0.5-2.0，默认1.0
