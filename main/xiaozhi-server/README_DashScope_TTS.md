@@ -30,7 +30,7 @@
 TTS:
   DashScopeTTS:
     # 阿里云DashScope非流式TTS服务
-    type: dashscope_simple
+    type: dashscope
     # 你的DashScope API密钥
     api_key: "你的DashScope API密钥"
     # 模型名称，支持cosyvoice-v2等

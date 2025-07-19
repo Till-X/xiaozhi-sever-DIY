@@ -31,7 +31,7 @@ def load_config():
         return yaml.safe_load(f)
 
 
-async def test_dashscope_simple_tts():
+async def test_dashscope_tts():
     """测试DashScope非流式TTS功能"""
     print("🚀 开始测试阿里云DashScope非流式TTS...")
     
@@ -112,4 +112,4 @@ async def test_dashscope_simple_tts():
 
 
 if __name__ == "__main__":
-    asyncio.run(test_dashscope_simple_tts())
+    asyncio.run(test_dashscope_tts())
