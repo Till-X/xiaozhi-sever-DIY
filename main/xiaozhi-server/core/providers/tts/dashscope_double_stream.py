@@ -122,8 +122,8 @@ class DashScopeCallback(ResultCallback):
                 logger.bind(tag=TAG).info("收到打断信息，跳过音频数据处理")
                 return
             
-            # 将PCM数据转换为Opus格式
-            opus_datas = self.tts_provider.pcm_to_opus_data(audio_data)
+            # 将PCM数据转换为Opus格式，传递is_last参数
+            opus_datas = self.tts_provider.pcm_to_opus_data(audio_data, is_end=is_last)
             
             if is_first:
                 sentence_type = SentenceType.FIRST
@@ -178,16 +178,12 @@ class TTSProvider(TTSProviderBase):
         if model_key_msg:
             logger.bind(tag=TAG).error(model_key_msg)
             
-    def pcm_to_opus_data(self, pcm_data):
+    def pcm_to_opus_data(self, pcm_data, is_end=False):
         """将PCM数据转换为Opus格式"""
         try:
-            # 确保PCM数据长度是偶数（16位音频）
-            if len(pcm_data) % 2 != 0:
-                pcm_data = pcm_data[:-1]
-                
-            # 转换为Opus格式
+            # 不需要手动处理奇数长度，直接传给编码器
             opus_datas = self.opus_encoder.encode_pcm_to_opus(
-                pcm_data, end_of_stream=False
+                pcm_data, end_of_stream=is_end
             )
             return opus_datas
         except Exception as e:
