@@ -34,9 +34,13 @@ class DashScopeCallback(ResultCallback):
     
     def __init__(self, tts_provider):
         self.tts_provider = tts_provider
-        self.audio_buffer = bytearray()
         self.is_first_data = True
         self.should_finish_session = False  # 标志是否需要在完成时结束会话
+        self.opus_datas_cache = []  # Opus数据缓存
+        self.first_sentence_segment_count = 0  # 第一句话的段数计数
+        self.is_first_sentence = True  # 是否是第一句话
+        self.cache_timer = None  # 缓存定时器
+        self.cache_send_interval = 0.06  # 60ms发送间隔
         
     def on_open(self):
         logger.bind(tag=TAG).info("DashScope TTS连接建立")
@@ -49,10 +53,9 @@ class DashScopeCallback(ResultCallback):
             logger.bind(tag=TAG).info("收到打断信息，跳过合成完成处理")
             return
         
-        # 发送最后的音频数据
-        if self.audio_buffer:
-            self._process_audio_data(self.audio_buffer, is_last=True)
-            self.audio_buffer.clear()
+        # 停止定时器并发送缓存的音频数据
+        self._stop_cache_timer()
+        self._flush_cached_audio(is_final=True)
         
         # 处理会话结束前的音频文件
         if hasattr(self.tts_provider, '_process_before_stop_play_files'):
@@ -82,6 +85,8 @@ class DashScopeCallback(ResultCallback):
         
     def on_close(self):
         logger.bind(tag=TAG).info("DashScope TTS连接关闭")
+        # 停止定时器
+        self._stop_cache_timer()
         # 连接关闭时检查是否是因为打断
         if hasattr(self.tts_provider, 'conn') and self.tts_provider.conn.client_abort:
             logger.bind(tag=TAG).info("因打断而关闭连接")
@@ -102,43 +107,147 @@ class DashScopeCallback(ResultCallback):
             logger.bind(tag=TAG).info("收到打断信息，终止音频数据处理")
             return
         
-        # 将音频数据添加到缓冲区
-        self.audio_buffer.extend(data)
+        # 参考豆包双流式逻辑：PCM数据接收后立即编码为Opus，不进行缓存
+        self._process_audio_data(data, is_first=self.is_first_data)
         
-        # 对于首句，快速发送小段音频以降低延迟
-        if self.is_first_data and len(self.audio_buffer) >= 4096:  # 4KB阈值
-            self._process_audio_data(self.audio_buffer[:4096], is_first=True)
-            self.audio_buffer = self.audio_buffer[4096:]
+        # 标记首次数据已处理
+        if self.is_first_data:
             self.is_first_data = False
-        elif len(self.audio_buffer) >= 8192:  # 8KB阈值
-            self._process_audio_data(self.audio_buffer, is_first=False)
-            self.audio_buffer.clear()
             
     def _process_audio_data(self, audio_data, is_first=False, is_last=False):
-        """处理音频数据并转换为Opus格式"""
+        """处理音频数据并转换为Opus格式，实现智能缓存机制"""
         try:
             # 检查客户端是否中止
             if hasattr(self.tts_provider, 'conn') and self.tts_provider.conn.client_abort:
                 logger.bind(tag=TAG).info("收到打断信息，跳过音频数据处理")
                 return
             
-            # 将PCM数据转换为Opus格式，传递is_last参数
+            # 将PCM数据转换为Opus格式
             opus_datas = self.tts_provider.pcm_to_opus_data(audio_data, is_end=is_last)
             
-            if is_first:
-                sentence_type = SentenceType.FIRST
-            elif is_last:
-                sentence_type = SentenceType.LAST
-            else:
-                sentence_type = SentenceType.MIDDLE
+            # 智能缓存策略：参考豆包双流式逻辑
+            if self.is_first_sentence:
+                # 第一句话：前6个段立即播放，后续段缓存
+                if self.first_sentence_segment_count < 6:
+                    # 立即发送前6个段
+                    sentence_type = SentenceType.FIRST if is_first else SentenceType.MIDDLE
+                    self.tts_provider.tts_audio_queue.put(
+                        (sentence_type, opus_datas, None)
+                    )
+                    logger.bind(tag=TAG).debug(f"第一句话第{self.first_sentence_segment_count + 1}段立即发送")
+                else:
+                    # 后续段缓存
+                    self.opus_datas_cache.extend(opus_datas)
+                    logger.bind(tag=TAG).debug(f"第一句话第{self.first_sentence_segment_count + 1}段已缓存")
                 
-            # 将音频数据放入队列
-            self.tts_provider.tts_audio_queue.put(
-                (sentence_type, opus_datas, None)
-            )
+                self.first_sentence_segment_count += 1
+            else:
+                # 非第一句话：全部缓存，启动定时发送
+                self.opus_datas_cache.extend(opus_datas)
+                logger.bind(tag=TAG).debug(f"非第一句话音频段已缓存，当前缓存大小: {len(self.opus_datas_cache)}")
+                
+                # 如果是后续句子且有缓存数据，启动定时发送
+                if self.opus_datas_cache and not self.cache_timer:
+                    self._start_cache_timer()
+                    logger.bind(tag=TAG).debug("启动后续句子定时发送机制")
             
         except Exception as e:
             logger.bind(tag=TAG).error(f"处理音频数据失败: {str(e)}")
+    
+    def _flush_cached_audio(self, is_final=False):
+        """发送缓存的音频数据"""
+        try:
+            if not self.opus_datas_cache:
+                logger.bind(tag=TAG).debug("没有缓存的音频数据需要发送")
+                return
+            
+            # 检查客户端是否中止
+            if hasattr(self.tts_provider, 'conn') and self.tts_provider.conn.client_abort:
+                logger.bind(tag=TAG).info("收到打断信息，清空音频缓存")
+                self.opus_datas_cache.clear()
+                self._stop_cache_timer()
+                return
+            
+            # 确定句子类型
+            if self.is_first_sentence and self.first_sentence_segment_count > 6:
+                # 第一句话的缓存部分
+                sentence_type = SentenceType.FIRST
+            elif is_final:
+                sentence_type = SentenceType.LAST
+            else:
+                sentence_type = SentenceType.MIDDLE
+            
+            # 发送缓存的音频数据
+            if self.opus_datas_cache:
+                self.tts_provider.tts_audio_queue.put(
+                    (sentence_type, self.opus_datas_cache.copy(), None)
+                )
+                logger.bind(tag=TAG).info(f"发送缓存音频数据，段数: {len(self.opus_datas_cache)}, 类型: {sentence_type}")
+                
+                # 清空缓存
+                self.opus_datas_cache.clear()
+            
+            # 如果是第一句话结束，标记为非第一句话
+            if self.is_first_sentence:
+                self.is_first_sentence = False
+                logger.bind(tag=TAG).debug("第一句话处理完成，后续为非第一句话")
+                
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"发送缓存音频数据失败: {str(e)}")
+    
+    def _send_cached_audio_timed(self):
+        """定时发送缓存的音频数据（用于后续句子）"""
+        if not self.opus_datas_cache or self.is_first_sentence:
+            return
+            
+        try:
+            # 检查客户端是否已中断
+            if hasattr(self.tts_provider, 'conn') and self.tts_provider.conn.client_abort:
+                logger.bind(tag=TAG).info("客户端已中断，停止定时发送")
+                self._stop_cache_timer()
+                return
+                
+            # 发送一段缓存的音频
+            if self.opus_datas_cache:
+                opus_data = self.opus_datas_cache.pop(0)
+                logger.bind(tag=TAG).debug("定时发送一段缓存音频")
+                
+                self.tts_provider.tts_audio_queue.put(
+                    (SentenceType.MIDDLE, [opus_data], None)
+                )
+                
+            # 如果还有缓存数据，继续设置定时器
+            if self.opus_datas_cache and not self.is_first_sentence:
+                self._start_cache_timer()
+                
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"定时发送缓存音频失败: {str(e)}")
+            
+    def _start_cache_timer(self):
+        """启动缓存定时器"""
+        if self.cache_timer:
+            self.cache_timer.cancel()
+        self.cache_timer = threading.Timer(self.cache_send_interval, self._send_cached_audio_timed)
+        self.cache_timer.start()
+        
+    def _stop_cache_timer(self):
+        """停止缓存定时器"""
+        if self.cache_timer:
+            self.cache_timer.cancel()
+            self.cache_timer = None
+    
+    def on_sentence_end(self):
+        """句子结束时调用，发送缓存的音频数据"""
+        logger.bind(tag=TAG).debug("句子结束，发送缓存的音频数据")
+        
+        # 停止定时器并发送剩余缓存
+        self._stop_cache_timer()
+        self._flush_cached_audio()
+        
+        # 第一句话处理完成后，将状态设置为False
+        if self.is_first_sentence:
+            self.is_first_sentence = False
+            logger.bind(tag=TAG).debug("第一句话处理完成，后续句子将使用定时缓存策略")
 
 
 class TTSProvider(TTSProviderBase):
@@ -157,11 +266,11 @@ class TTSProvider(TTSProviderBase):
         self.api_key = config.get("api_key")
         self.model = config.get("model", "cosyvoice-v2")
         self.voice = config.get("voice", "cosyvoice-v2-prefix-113881176adb43aba3acde2406ebfe0e")
-        self.audio_format = config.get("audio_format", "PCM_22050HZ_MONO_16BIT")
+        self.audio_format = config.get("audio_format", "PCM_16000HZ_MONO_16BIT")
         
         # 设置API密钥
         if self.api_key:
-            dashscope.api_key = self.api_key
+            setattr(dashscope, 'api_key', self.api_key)
         
         # 创建Opus编码器 - 使用标准16kHz采样率
         self.opus_encoder = opus_encoder_utils.OpusEncoderUtils(
@@ -231,6 +340,15 @@ class TTSProvider(TTSProviderBase):
                         future.result()
                         self.tts_audio_first_sentence = True
                         self.before_stop_play_files.clear()
+                        
+                        # 重置回调状态，确保每次新会话都从第一句话开始
+                        if self.callback:
+                            self.callback.is_first_sentence = True
+                            self.callback.first_sentence_segment_count = 0
+                            self.callback.opus_datas_cache.clear()
+                            self.callback._stop_cache_timer()  # 停止之前的定时器
+                            logger.bind(tag=TAG).debug("回调状态已重置为第一句话")
+                            
                         logger.bind(tag=TAG).info("DashScope TTS会话启动成功")
                     except Exception as e:
                         logger.bind(tag=TAG).error(f"启动TTS会话失败: {str(e)}")
@@ -253,6 +371,11 @@ class TTSProvider(TTSProviderBase):
                             )
                             future.result()
                             logger.bind(tag=TAG).debug("TTS文本发送成功")
+                            
+                            # 文本发送完成后，触发句子结束处理（发送缓存的音频）
+                            if self.callback:
+                                self.callback.on_sentence_end()
+                                
                         except Exception as e:
                             logger.bind(tag=TAG).error(f"发送TTS文本失败: {str(e)}")
                             continue

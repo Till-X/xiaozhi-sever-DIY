@@ -783,8 +783,8 @@ TTS:
     model: "cosyvoice-v2"
     # 音色ID，可在控制台查看可用音色
     voice: "cosyvoice-v2-prefix-113881176adb43aba3acde2406ebfe0e"
-    # 音频格式，支持PCM_22050HZ_MONO_16BIT、PCM_16000HZ_MONO_16BIT等
-    audio_format: "PCM_16000HZ_MONO_16BIT"
+    # 音频格式，WAV_16000HZ_MONO_16BIT
+    audio_format: "WAV_16000HZ_MONO_16BIT"
     output_dir: tmp/
   DashScopeTTS:
     # 阿里云DashScope非流式TTS服务
