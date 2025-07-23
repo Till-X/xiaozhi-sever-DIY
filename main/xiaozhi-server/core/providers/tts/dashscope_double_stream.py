@@ -268,6 +268,15 @@ class TTSProvider(TTSProviderBase):
         self.voice = config.get("voice", "cosyvoice-v2-prefix-113881176adb43aba3acde2406ebfe0e")
         self.audio_format = config.get("audio_format", "PCM_16000HZ_MONO_16BIT")
         
+        # 语速参数处理
+        speech_rate = config.get("speech_rate", "1.0")
+        self.speech_rate = float(speech_rate) if speech_rate else 1.0
+        # 确保语速在有效范围内
+        if self.speech_rate < 0.5:
+            self.speech_rate = 0.5
+        elif self.speech_rate > 2.0:
+            self.speech_rate = 2.0
+        
         # 设置API密钥
         if self.api_key:
             setattr(dashscope, 'api_key', self.api_key)
@@ -469,6 +478,7 @@ class TTSProvider(TTSProviderBase):
                 voice=self.voice,
                 format=audio_format,
                 callback=self.callback,
+                speech_rate=self.speech_rate,
             )
             
             self.session_active = True

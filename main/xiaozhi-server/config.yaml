@@ -785,6 +785,8 @@ TTS:
     voice: "cosyvoice-v2-prefix-113881176adb43aba3acde2406ebfe0e"
     # 音频格式，WAV_16000HZ_MONO_16BIT
     audio_format: "WAV_16000HZ_MONO_16BIT"
+    # 语速：0.5-2.0，默认1.0
+    speech_rate: 1.1
     output_dir: tmp/
   DashScopeTTS:
     # 阿里云DashScope非流式TTS服务
